@@ -1,60 +1,67 @@
-# Text-classification
-Comparing  Transformers vs TF-IDF method
-🚀 Toxic Comment Classification: TF-IDF + Neural Network VS BERT Transformer
-📌 Project goal:
-Compare a classical TF-IDF vectorization + fully connected neural network approach against a modern BERT Transformer model for multi-label toxic comment classification.
+# Text Classification: Comparing Transformers vs TF-IDF Method 🚀
 
-🧪 What was done?
-Used the Jigsaw Toxic Comment Classification dataset
+## Toxic Comment Classification: TF-IDF + Neural Network VS BERT Transformer
 
-Implemented a baseline using TF-IDF vectorizer + deep neural network with dropout and batch norm
+### 📌 Project goal:
+Compare a classical **TF-IDF vectorization + fully connected neural network** approach against a modern **BERT Transformer** model for multi-label toxic comment classification.
 
-Developed a BERT Transformer model fine-tuned on the same task
+---
 
-Evaluated all models on ROC AUC metric (macro-average over 6 toxic categories)
+### 🧪 What was done?
 
-⚡ Results
-Method	Validation ROC AUC
-TF-IDF + Neural Network (this project)	0.9600
-BERT Transformer (this project)	0.9874
+- Used the **Jigsaw Toxic Comment Classification** dataset  
+- Implemented a baseline using **TF-IDF vectorizer + deep neural network** with dropout and batch norm  
+- Developed a **BERT Transformer** model fine-tuned on the same task  
+- Evaluated all models on **ROC AUC** metric (macro-average over 6 toxic categories)
 
-💥 BERT significantly outperforms the TF-IDF + Neural Network baseline (98.74% vs 96%)!
+---
 
-📈 Key takeaways:
-TF-IDF + Neural Network:
+### ⚡ Results
 
-Effective classical NLP pipeline
+| Method                          | Validation ROC AUC |
+|--------------------------------|-------------------:|
+| TF-IDF + Neural Network (this project) |           0.9600 |
+| **BERT Transformer (this project)**    |       **0.9874** |
 
-Preprocessing: tokenization, lemmatization, stopwords removal
+> 💥 BERT significantly outperforms the TF-IDF + Neural Network baseline (98.74% vs 96%)!
 
-3-layer fully connected network with batch norm, dropout, ReLU activations
+---
 
-Works well but limited by lack of context awareness
+### 📈 Key takeaways:
 
-BERT Transformer:
+**TF-IDF + Neural Network:**
 
-Pretrained contextual embeddings capture nuances and semantics
+- Effective classical NLP pipeline  
+- Preprocessing: tokenization, lemmatization, stopwords removal  
+- 3-layer fully connected network with batch norm, dropout, ReLU activations  
+- Works well but limited by lack of context awareness  
 
-Fine-tuning with simple classification head improves performance drastically
+**BERT Transformer:**
 
-Better generalization and higher ROC AUC scores
+- Pretrained contextual embeddings capture nuances and semantics  
+- Fine-tuning with simple classification head improves performance drastically  
+- Better generalization and higher ROC AUC scores  
 
-Both models trained with learning rate scheduling and early stopping to ensure stability
+Both models trained with learning rate scheduling and early stopping to ensure stability.
 
-🛠️ How to run
-Prepare the dataset (upload and unzip)
+---
 
-Run the TF-IDF + Neural Network training script to establish the baseline
+### 🛠️ How to run:
 
-Run the BERT fine-tuning script for superior results
+1. Prepare the dataset (upload and unzip)  
+2. Run the **TF-IDF + Neural Network** training script to establish the baseline  
+3. Run the **BERT fine-tuning** script for superior results  
+4. Monitor losses and ROC AUC metrics  
+5. Use the saved `best_model.pt` checkpoint for predictions  
 
-Monitor losses and ROC AUC metrics
+---
 
-Use the saved best_model.pt checkpoint for predictions
+### 🎯 Conclusion:
 
-🎯 Conclusion
 This project clearly demonstrates the power of pretrained Transformers for toxic comment classification compared to traditional vectorization + neural network approaches. While the TF-IDF + NN baseline achieves solid results, BERT’s ability to understand context boosts performance significantly.
 
-🙌 Thanks for checking out this project!
-Feel free to experiment with model architectures, additional preprocessing, or other Transformer variants to push results even further. Happy coding! ✨
+---
 
+### 🙌 Thanks for checking out this project!
+
+Feel free to experiment with model architectures, additional preprocessing, or other Transformer variants to push results even further. Happy coding! ✨
