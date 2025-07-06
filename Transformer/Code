@@ -1,0 +1,149 @@
+from google.colab import files
+import zipfile, os, pandas as pd
+from sklearn.model_selection import train_test_split
+
+# Upload your dataset ZIP from Kaggle
+uploaded = files.upload()
+
+# Unzip main archive
+with zipfile.ZipFile("jigsaw-toxic-comment-classification-challenge.zip", 'r') as z:
+    z.extractall("data")
+
+# Unzip train.csv.zip
+with zipfile.ZipFile("data/train.csv.zip", 'r') as z:
+    z.extractall("data")
+
+# Load into DataFrame
+train_df = pd.read_csv("data/train.csv")
+texts = train_df['comment_text'].values
+labels = train_df[['toxic','severe_toxic','obscene','threat','insult','identity_hate']].values
+
+# Train/validation split
+X_train0, X_val0, y_train_np, y_val_np = train_test_split(
+    texts, labels, test_size=0.2, random_state=42
+)
+  Model & Training Script
+import os, time, numpy as np, torch
+from torch.utils.data import Dataset, DataLoader
+from torch import nn
+from transformers import BertTokenizerFast, BertModel
+from sklearn.metrics import roc_auc_score
+import matplotlib.pyplot as plt
+
+# Enable CUDA debug mode
+os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print("Device:", device)
+
+# Safe ROC AUC (skip labels with no positive)
+def safe_roc_auc_score(y_true, y_pred):
+    aucs = []
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
+    for i in range(y_true.shape[1]):
+        if len(np.unique(y_true[:, i])) < 2:
+            continue
+        aucs.append(roc_auc_score(y_true[:, i], y_pred[:, i]))
+    return np.mean(aucs) if aucs else float('nan')
+
+# Tokenization
+tokenizer = BertTokenizerFast.from_pretrained('bert-base-uncased')
+train_enc = tokenizer(list(X_train0), truncation=True, padding=True, max_length=128)
+val_enc   = tokenizer(list(X_val0), truncation=True, padding=True, max_length=128)
+
+# Dataset class
+class ToxicDataset(Dataset):
+    def __init__(self, encodings, labels):
+        self.encodings, self.labels = encodings, labels
+    def __len__(self):
+        return len(self.labels)
+    def __getitem__(self, idx):
+        item = {k: torch.tensor(v[idx]) for k,v in self.encodings.items()}
+        item["labels"] = torch.tensor(self.labels[idx], dtype=torch.float32)
+        return item
+
+train_ds = ToxicDataset(train_enc, y_train_np)
+val_ds   = ToxicDataset(val_enc,   y_val_np)
+train_loader = DataLoader(train_ds, batch_size=8, shuffle=True)
+val_loader   = DataLoader(val_ds,   batch_size=8)
+
+# Multi‑label BERT model
+class MultiLabelBERT(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.bert = BertModel.from_pretrained('bert-base-uncased')
+        self.dropout = nn.Dropout(0.3)
+        self.classifier = nn.Linear(self.bert.config.hidden_size, 6)
+    def forward(self, input_ids, attention_mask):
+        outputs = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+        x = self.dropout(outputs.pooler_output)
+        return self.classifier(x)
+
+model = MultiLabelBERT().to(device)
+criterion = nn.BCEWithLogitsLoss()
+optimizer = torch.optim.AdamW(model.parameters(), lr=2e-5)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=3)
+
+# Training loop
+train_losses, val_losses, val_roc_aucs = [], [], []
+best_roc_auc, best_model_path = -1, "best_model.pt"
+epochs = 10
+
+for epoch in range(1, epochs+1):
+    print(f"\n🔁 Epoch {epoch}/{epochs} — training")
+    model.train()
+    total_train_loss = 0
+    for i, batch in enumerate(train_loader):
+        optimizer.zero_grad()
+        ids = batch["input_ids"].to(device)
+        mask = batch["attention_mask"].to(device)
+        labels = batch["labels"].to(device)
+        logits = model(ids, mask)
+        loss = criterion(logits, labels)
+        loss.backward()
+        optimizer.step()
+        total_train_loss += loss.item()
+        if i % 10 == 0:
+            print(f"  Batch {i} — loss: {loss.item():.4f}")
+        if i == 50: break  # debug stop
+
+    train_losses.append(total_train_loss / len(train_loader))
+
+    # Validation
+    model.eval()
+    total_val_loss, all_labels, all_preds = 0, [], []
+    with torch.no_grad():
+        for i, batch in enumerate(val_loader):
+            ids = batch["input_ids"].to(device)
+            mask = batch["attention_mask"].to(device)
+            labels = batch["labels"].to(device)
+            logits = model(ids, mask)
+            total_val_loss += criterion(logits, labels).item()
+            probs = torch.sigmoid(logits).cpu().numpy()
+            all_preds.extend(probs)
+            all_labels.extend(labels.cpu().numpy())
+            if i == 10: break  # debug stop
+
+    val_losses.append(total_val_loss / len(val_loader))
+    roc_auc = safe_roc_auc_score(all_labels, all_preds)
+    val_roc_aucs.append(roc_auc)
+    scheduler.step(roc_auc)
+
+    # Save best
+    if roc_auc > best_roc_auc:
+        best_roc_auc = roc_auc
+        torch.save(model.state_dict(), best_model_path)
+        print(f"💾 Saved best model (ROC AUC: {roc_auc:.4f})")
+
+    print(f"Epoch {epoch} | Train Loss: {train_losses[-1]:.4f} | Val Loss: {val_losses[-1]:.4f} | ROC AUC: {roc_auc:.4f}")
+
+# Plot losses & ROC AUC
+plt.figure(figsize=(8,5))
+plt.plot(train_losses, label="Train Loss")
+plt.plot(val_losses,   label="Val Loss")
+plt.title("Loss Curves"); plt.xlabel("Epoch"); plt.ylabel("Loss"); plt.legend(); plt.grid(); plt.show()
+
+plt.figure(figsize=(8,5))
+plt.plot(val_roc_aucs, label="Val ROC AUC")
+plt.title("Validation ROC AUC"); plt.xlabel("Epoch"); plt.ylabel("ROC AUC"); plt.legend(); plt.grid(); plt.show()
+
+print(f"🏁 Best Validation ROC AUC: {best_roc_auc:.4f} — model saved to '{best_model_path}'")
